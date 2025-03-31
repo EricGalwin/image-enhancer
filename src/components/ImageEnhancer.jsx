@@ -10,7 +10,9 @@ const ImageEnhancer = () => {
     const [invert, setInvert] = useState(0);
     const [hueRotate, setHueRotate] = useState(0);
     const [blur, setBlur] = useState(0);
-    
+    const [sharpness, setSharpness] = useState(0);
+    const [resolutionScale, setResolutionScale] = useState(1);
+
     const imageRef = useRef(null);
     const canvasRef = useRef(null);
 
@@ -26,16 +28,36 @@ const ImageEnhancer = () => {
         }
     };
 
-    // Handle image download
-    const handleDownload = () => {
+    // Enhance Resolution
+    const enhanceResolution = () => {
+        if (!image) return;
+
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+
+        const img = new Image();
+        img.src = image;
+
+        img.onload = () => {
+            canvas.width = img.width * resolutionScale;
+            canvas.height = img.height * resolutionScale;
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            const enhancedImage = canvas.toDataURL("image/png");
+            setImage(enhancedImage);
+        };
+    };
+
+    // Apply Filters + Deblur
+    const applyFilters = () => {
         if (!imageRef.current || !canvasRef.current) return;
 
         const canvas = canvasRef.current;
         const ctx = canvas.getContext("2d");
 
         const img = imageRef.current;
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
+        canvas.width = img.naturalWidth * resolutionScale;
+        canvas.height = img.naturalHeight * resolutionScale;
 
         ctx.filter = `
             brightness(${brightness}%) 
@@ -47,13 +69,33 @@ const ImageEnhancer = () => {
             hue-rotate(${hueRotate}deg) 
             blur(${blur}px)
         `;
-        
+
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-        // Create a download link
+        // Deblurring (Sharpening)
+        if (sharpness > 0) {
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+
+            for (let i = 0; i < data.length; i += 4) {
+                data[i] = data[i] + sharpness; // Red
+                data[i + 1] = data[i + 1] + sharpness; // Green
+                data[i + 2] = data[i + 2] + sharpness; // Blue
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        setImage(canvas.toDataURL("image/png"));
+    };
+
+    // Handle image download
+    const handleDownload = () => {
+        applyFilters(); // Apply filters before downloading
+
         const link = document.createElement("a");
-        link.download = "edited-image.png";
-        link.href = canvas.toDataURL("image/png");
+        link.download = "enhanced-image.png";
+        link.href = image;
         link.click();
     };
 
@@ -89,6 +131,12 @@ const ImageEnhancer = () => {
                 
                 <label>Blur:</label>
                 <input type="range" min="0" max="10" value={blur} onChange={(e) => setBlur(e.target.value)} className="w-full" />
+
+                <label>Sharpness (Deblur):</label>
+                <input type="range" min="0" max="50" value={sharpness} onChange={(e) => setSharpness(e.target.value)} className="w-full" />
+
+                <label>Resolution Scale:</label>
+                <input type="range" min="1" max="4" step="0.1" value={resolutionScale} onChange={(e) => setResolutionScale(e.target.value)} onMouseUp={enhanceResolution} className="w-full" />
             </div>
 
             {/* Image Preview */}
@@ -97,12 +145,18 @@ const ImageEnhancer = () => {
                     <img
                         ref={imageRef}
                         src={image}
-                        alt="Edited"
+                        alt="Enhanced"
                         className="w-full max-w-lg h-auto object-contain rounded-lg shadow-md"
                         style={{
                             filter: `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) grayscale(${grayscale}%) sepia(${sepia}%) invert(${invert}%) hue-rotate(${hueRotate}deg) blur(${blur}px)`,
                         }}
                     />
+                    
+                    {/* Apply Filters Button */}
+                    <button onClick={applyFilters} className="mt-4 bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+                        Apply Enhancements
+                    </button>
+
                     {/* Download Button */}
                     <button onClick={handleDownload} className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
                         Download Image
