@@ -10,7 +10,8 @@ const ImageEnhancer = () => {
     const [invert, setInvert] = useState(0);
     const [hueRotate, setHueRotate] = useState(0);
     const [blur, setBlur] = useState(0);
-    
+    const [sharpness, setSharpness] = useState(0); // New Deblur Feature
+
     const imageRef = useRef(null);
     const canvasRef = useRef(null);
 
@@ -26,7 +27,7 @@ const ImageEnhancer = () => {
         }
     };
 
-    // Handle image download
+    // Handle image processing and download
     const handleDownload = () => {
         if (!imageRef.current || !canvasRef.current) return;
 
@@ -37,6 +38,7 @@ const ImageEnhancer = () => {
         canvas.width = img.naturalWidth;
         canvas.height = img.naturalHeight;
 
+        // Apply filters
         ctx.filter = `
             brightness(${brightness}%) 
             contrast(${contrast}%) 
@@ -47,8 +49,15 @@ const ImageEnhancer = () => {
             hue-rotate(${hueRotate}deg) 
             blur(${blur}px)
         `;
-        
+
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        // Apply sharpening filter if needed
+        if (sharpness > 0) {
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            applySharpening(imageData, sharpness);
+            ctx.putImageData(imageData, 0, 0);
+        }
 
         // Create a download link
         const link = document.createElement("a");
@@ -57,10 +66,43 @@ const ImageEnhancer = () => {
         link.click();
     };
 
+    // Apply sharpening filter (Deblur)
+    const applySharpening = (imageData, level) => {
+        const kernel = [
+            [0, -1, 0],
+            [-1, 5 + level, -1],
+            [0, -1, 0]
+        ];
+
+        const data = imageData.data;
+        const width = imageData.width;
+        const height = imageData.height;
+
+        for (let y = 1; y < height - 1; y++) {
+            for (let x = 1; x < width - 1; x++) {
+                let r = 0, g = 0, b = 0;
+                for (let ky = -1; ky <= 1; ky++) {
+                    for (let kx = -1; kx <= 1; kx++) {
+                        const pixelIndex = ((y + ky) * width + (x + kx)) * 4;
+                        const weight = kernel[ky + 1][kx + 1];
+
+                        r += data[pixelIndex] * weight;
+                        g += data[pixelIndex + 1] * weight;
+                        b += data[pixelIndex + 2] * weight;
+                    }
+                }
+                const index = (y * width + x) * 4;
+                data[index] = Math.min(Math.max(r, 0), 255);
+                data[index + 1] = Math.min(Math.max(g, 0), 255);
+                data[index + 2] = Math.min(Math.max(b, 0), 255);
+            }
+        }
+    };
+
     return (
         <div className="flex flex-col items-center bg-gray-800 min-h-screen p-6">
             {/* Centered Title */}
-            <h1 className="text-4xl font-bold text-white text-center w-full mt-6">
+            <h1 className="text-4xl font-bold text-white mb-6 text-center w-full">
                 Image Enhancer
             </h1>
 
@@ -92,6 +134,9 @@ const ImageEnhancer = () => {
                 
                 <label>Blur:</label>
                 <input type="range" min="0" max="10" value={blur} onChange={(e) => setBlur(e.target.value)} className="w-full" />
+
+                <label>Sharpness (Deblur):</label>
+                <input type="range" min="0" max="5" value={sharpness} onChange={(e) => setSharpness(e.target.value)} className="w-full" />
             </div>
 
             {/* Image Preview */}
